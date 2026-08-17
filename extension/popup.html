@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Zoom Attendance Tracker</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        width: 340px;
+        background: #0f1117;
+        color: #e2e8f0;
+        padding: 16px;
+        font-size: 13px;
+      }
+
+      /* Header */
+      .header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 16px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid #1e293b;
+      }
+      .header img { width: 32px; height: 32px; border-radius: 8px; }
+      .header h1 { font-size: 14px; font-weight: 600; color: #f1f5f9; }
+      .header p { font-size: 11px; color: #64748b; }
+
+      /* File input */
+      .file-label {
+        display: block;
+        font-size: 11px;
+        color: #94a3b8;
+        margin-bottom: 6px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .file-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      #csvFileInput { display: none; }
+      .file-btn {
+        padding: 7px 12px;
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 6px;
+        color: #94a3b8;
+        cursor: pointer;
+        font-size: 12px;
+        white-space: nowrap;
+        transition: all 0.15s;
+      }
+      .file-btn:hover { background: #273548; border-color: #4f6b8a; }
+      #fileName {
+        color: #64748b;
+        font-size: 11px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex: 1;
+      }
+      #fileName.selected { color: #38bdf8; }
+
+      /* Main button */
+      #processBtn {
+        width: 100%;
+        padding: 10px;
+        background: linear-gradient(135deg, #2563eb, #1d4ed8);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+        transition: all 0.15s;
+        letter-spacing: 0.01em;
+      }
+      #processBtn:hover { background: linear-gradient(135deg, #3b82f6, #2563eb); transform: translateY(-1px); }
+      #processBtn:active { transform: translateY(0); }
+
+      /* Status */
+      .status {
+        margin-top: 10px;
+        padding: 8px 10px;
+        border-radius: 6px;
+        font-size: 12px;
+        min-height: 34px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .status.loading { background: #1e293b; color: #94a3b8; }
+      .status.success { background: #052e16; color: #4ade80; border: 1px solid #166534; }
+      .status.warning { background: #2d1b00; color: #f59e0b; border: 1px solid #78350f; }
+      .status.error   { background: #2d0f0f; color: #f87171; border: 1px solid #7f1d1d; }
+
+      /* Summary bar */
+      #summary {
+        margin-top: 10px;
+        font-size: 11px;
+        color: #64748b;
+        text-align: center;
+      }
+
+      /* Results table */
+      #resultSection {
+        display: none;
+        margin-top: 10px;
+      }
+      .table-wrap {
+        max-height: 200px;
+        overflow-y: auto;
+        border: 1px solid #1e293b;
+        border-radius: 6px;
+      }
+      .table-wrap::-webkit-scrollbar { width: 4px; }
+      .table-wrap::-webkit-scrollbar-track { background: #0f1117; }
+      .table-wrap::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+
+      table { width: 100%; border-collapse: collapse; }
+      th {
+        padding: 6px 8px;
+        text-align: left;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #475569;
+        background: #0d1421;
+        position: sticky;
+        top: 0;
+      }
+      td { padding: 5px 8px; border-top: 1px solid #1a2433; }
+      tr:hover td { background: #141c2b; }
+      td.nombre { color: #e2e8f0; }
+      td.presente { color: #4ade80; }
+      td.ausente  { color: #f87171; }
+      td.cam-on   { color: #34d399; }
+      td.cam-off  { color: #64748b; }
+
+      /* Download button */
+      #downloadBtn {
+        display: none;
+        width: 100%;
+        margin-top: 8px;
+        padding: 8px;
+        background: #052e16;
+        color: #4ade80;
+        border: 1px solid #166534;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 600;
+        transition: all 0.15s;
+      }
+      #downloadBtn:hover { background: #064e1d; }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <img src="icons/icon48.png" alt="Logo" />
+      <div>
+        <h1>Zoom Attendance Tracker</h1>
+        <p>Asistencia automática en reuniones de Zoom</p>
+      </div>
+    </div>
+
+    <label class="file-label" for="csvFileInput">Lista de alumnos (CSV)</label>
+    <div class="file-row">
+      <label class="file-btn" for="csvFileInput">📂 Elegir archivo</label>
+      <input type="file" id="csvFileInput" accept=".csv,.txt" />
+      <span id="fileName">Ningún archivo seleccionado</span>
+    </div>
+
+    <button id="processBtn">⚡ Escanear y procesar asistencia</button>
+
+    <div id="status" class="status loading" style="display:none;"></div>
+    <div id="summary"></div>
+
+    <div id="resultSection">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Alumno</th>
+              <th>Asistencia</th>
+              <th>Cámara</th>
+            </tr>
+          </thead>
+          <tbody id="resultBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <button id="downloadBtn">⬇ Descargar reporte CSV</button>
+
+    <script>
+      // Mostrar nombre del archivo seleccionado
+      document.getElementById("csvFileInput").addEventListener("change", function () {
+        const label = document.getElementById("fileName");
+        if (this.files.length > 0) {
+          label.textContent = this.files[0].name;
+          label.className = "selected";
+        } else {
+          label.textContent = "Ningún archivo seleccionado";
+          label.className = "";
+        }
+        // Ocultar resultados anteriores al cambiar archivo
+        document.getElementById("resultSection").style.display = "none";
+        document.getElementById("downloadBtn").style.display = "none";
+        document.getElementById("status").style.display = "none";
+        document.getElementById("summary").textContent = "";
+      });
+
+      // Mostrar/ocultar el status con helper
+      const _origSetStatus = window.setStatus;
+      document.addEventListener("DOMContentLoaded", () => {
+        const statusDiv = document.getElementById("status");
+        // Hacer el status visible cuando se llama
+        const origSetStatus = window.setStatus;
+        window.setStatus = (type, msg) => {
+          statusDiv.style.display = "flex";
+          statusDiv.textContent = msg;
+          statusDiv.className = "status " + type;
+        };
+      });
+    </script>
+    <script src="popup.js"></script>
+  </body>
+</html>

@@ -1,0 +1,12 @@
+# Sistemas operativos
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDEs
+.vscode/
+.idea/
+*.code-workspace
+
+# ZIP de distribución (generado al empaquetar)
+ZoomAttendanceTracker.zip
