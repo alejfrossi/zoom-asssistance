@@ -1,3 +1,7 @@
+# Listas de alumnos (datos privados, no subir al repo)
+lista_alumnos.csv
+*.csv
+
 # Sistemas operativos
 .DS_Store
 Thumbs.db
