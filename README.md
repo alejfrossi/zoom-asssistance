@@ -70,7 +70,6 @@ zoom-assistance/
         popup.html
         popup.js
         icons/
-    lista_alumnos.csv     # lista de ejemplo
     INSTRUCCIONES.txt     # guía de instalación para el usuario final
 ```
 
