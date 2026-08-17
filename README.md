@@ -1,8 +1,8 @@
-# Zoom Assistance Tracker
+# Zoom Attendance Tracker
 
-Extensión de Chrome que cruza la lista de participantes activos en una reunión de Zoom con un registro CSV y genera un reporte de asistencia descargable.
+Extensión de Chrome (Manifest V3) que cruza la lista de participantes activos en una reunión de Zoom con un registro CSV y genera un reporte de asistencia descargable.
 
-Sin servidor externo, sin dependencias — todo corre en el navegador.
+Sin servidor externo, sin Python, sin dependencias — todo corre en el navegador.
 
 ---
 
@@ -70,6 +70,7 @@ zoom-assistance/
         popup.html
         popup.js
         icons/
+    lista_alumnos.csv     # lista de ejemplo
     INSTRUCCIONES.txt     # guía de instalación para el usuario final
 ```
 
