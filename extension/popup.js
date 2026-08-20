@@ -30,7 +30,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       const injectionResults = await chrome.scripting.executeScript({
         target: { tabId: tab.id, allFrames: true },
-        func: scrapeZoomData,
+        func: scrapeZoomDataFull,
       });
 
       // Buscar el frame que devolvió datos reales
@@ -124,62 +124,140 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // ============================================================
 // LÓGICA DE SCRAPING (se inyecta en la pestaña de Zoom)
+// IMPORTANTE: scrapeZoomDataFull debe ser completamente auto-contenida
+// porque chrome.scripting.executeScript con `func` inyecta UNA SOLA función
+// sin acceso al scope externo. Toda la lógica auxiliar va DENTRO de ella.
 // ============================================================
-function scrapeZoomData() {
+
+/**
+ * Función principal de scraping con scroll automático.
+ * Auto-contenida: no depende de ninguna función externa.
+ * Recorre toda la lista virtualizada de Zoom haciendo scroll progresivo
+ * y recolectando participantes en cada posición.
+ */
+async function scrapeZoomDataFull() {
   const data = {};
 
-  // Estrategia 1: buscar dentro del contenedor principal
-  let items = null;
-  const container = document.getElementById("participants-ul");
-  if (container) {
-    items = container.querySelectorAll(".participants-li, [id^='participants-list-']");
-  }
-  // Estrategia 2: buscar en todo el documento
-  if (!items || items.length === 0) {
-    items = document.querySelectorAll(".participants-li, [id^='participants-list-']");
-  }
-  // Estrategia 3: buscar por aria-label de la lista
-  if (!items || items.length === 0) {
-    const listContainer = document.querySelector(
-      '[aria-label="Participants list"], [aria-label="Lista de participantes"]'
-    );
-    if (listContainer) {
-      items = listContainer.querySelectorAll(".participants-li, [id^='participants-list-'], [role='application']");
+  // ── Helper interno: extraer items visibles en el DOM ────────────────────
+  function scrapeVisibleItems() {
+    let items = null;
+
+    // Estrategia 1: contenedor por ID
+    const container = document.getElementById("participants-ul");
+    if (container) {
+      items = container.querySelectorAll(".participants-li, [id^='participants-list-']");
     }
+    // Estrategia 2: todo el documento
+    if (!items || items.length === 0) {
+      items = document.querySelectorAll(".participants-li, [id^='participants-list-']");
+    }
+    // Estrategia 3: por aria-label del contenedor de lista
+    if (!items || items.length === 0) {
+      const listContainer = document.querySelector(
+        '[aria-label="Participants list"], [aria-label="Lista de participantes"]'
+      );
+      if (listContainer) {
+        items = listContainer.querySelectorAll(
+          ".participants-li, [id^='participants-list-'], [role='application']"
+        );
+      }
+    }
+
+    if (!items || items.length === 0) return false;
+
+    items.forEach((el) => {
+      // Nombre desde span de display
+      const nameEl = el.querySelector(".participants-item__display-name");
+      let name = nameEl ? nameEl.innerText.trim() : "";
+
+      // Fallback: desde aria-label
+      const aria = el.getAttribute("aria-label") || "";
+      if (!name && aria) {
+        name = aria.split(",")[0].replace(/\s*\([^)]*\)/g, "").trim();
+      }
+
+      if (!name) return;
+
+      // Estado de cámara
+      const ariaLower = aria.toLowerCase();
+      const videoOffSvg  = el.querySelector('svg[class*="video-off"]');
+      const videoOnSvg   = el.querySelector('svg[class*="video-on"]');
+      const videoOffAria = ariaLower.includes("video off") || ariaLower.includes("video apagado");
+      const videoOnAria  = ariaLower.includes("video on")  || ariaLower.includes("video encendido");
+
+      let camera_on = true;
+      if (videoOffSvg || videoOffAria) camera_on = false;
+      else if (videoOnSvg || videoOnAria) camera_on = true;
+
+      // Solo registra la primera aparición (no sobreescribe)
+      if (!(name in data)) {
+        data[name] = { camera_on };
+      }
+    });
+
+    return true;
   }
 
-  if (!items || items.length === 0) {
+  // ── Helper interno: encontrar contenedor scrolleable ────────────────────
+  function findScrollContainer() {
+    const candidates = [
+      document.getElementById("participants-ul"),
+      document.querySelector('[aria-label="Participants list"]'),
+      document.querySelector('[aria-label="Lista de participantes"]'),
+      document.querySelector(".participants-ul"),
+      document.querySelector(".participants-list"),
+      document.querySelector(".participant-list__container"),
+    ];
+    for (const el of candidates) {
+      if (el && el.scrollHeight > el.clientHeight) return el;
+    }
+    // Búsqueda genérica: ancestro scrolleable del primer item
+    const firstItem = document.querySelector(".participants-li, [id^='participants-list-']");
+    if (firstItem) {
+      let parent = firstItem.parentElement;
+      while (parent && parent !== document.body) {
+        if (parent.scrollHeight > parent.clientHeight + 5) return parent;
+        parent = parent.parentElement;
+      }
+    }
+    return null;
+  }
+
+  // ── Lectura inicial (posición de scroll = 0) ────────────────────────────
+  const foundInitial = scrapeVisibleItems();
+
+  if (!foundInitial) {
     return {
       error: "No se detectó la lista de participantes. Abrí el panel 'Participantes' en Zoom."
     };
   }
 
-  items.forEach((el) => {
-    // Nombre desde el span de display
-    const nameEl = el.querySelector(".participants-item__display-name");
-    let name = nameEl ? nameEl.innerText.trim() : "";
+  // ── Scroll automático para recorrer toda la lista virtualizada ──────────
+  const scrollEl = findScrollContainer();
 
-    // Fallback: desde aria-label
-    const aria = el.getAttribute("aria-label") || "";
-    if (!name && aria) {
-      name = aria.split(",")[0].replace(/\s*\([^)]*\)/g, "").trim();
+  if (scrollEl && scrollEl.scrollHeight > scrollEl.clientHeight) {
+    const scrollStep  = Math.max(scrollEl.clientHeight * 0.75, 100); // 75% del alto visible
+    const maxScroll   = scrollEl.scrollHeight - scrollEl.clientHeight;
+    const delayMs     = 120; // ms de espera para que el DOM virtualizado actualice
+
+    let currentScroll = 0;
+    while (currentScroll < maxScroll) {
+      currentScroll = Math.min(currentScroll + scrollStep, maxScroll);
+      scrollEl.scrollTop = currentScroll;
+      await new Promise(r => setTimeout(r, delayMs));
+      scrapeVisibleItems();
     }
 
-    if (!name) return;
+    // Restaurar scroll al inicio para no desorientar al usuario
+    scrollEl.scrollTop = 0;
+    await new Promise(r => setTimeout(r, 80));
+  }
 
-    // Estado de la cámara
-    const ariaLower = aria.toLowerCase();
-    const videoOffSvg = el.querySelector('svg[class*="video-off"]');
-    const videoOnSvg = el.querySelector('svg[class*="video-on"]');
-    const videoOffAria = ariaLower.includes("video off") || ariaLower.includes("video apagado");
-    const videoOnAria = ariaLower.includes("video on") || ariaLower.includes("video encendido");
-
-    let camera_on = true;
-    if (videoOffSvg || videoOffAria) camera_on = false;
-    else if (videoOnSvg || videoOnAria) camera_on = true;
-
-    data[name] = { camera_on };
-  });
+  if (Object.keys(data).length === 0) {
+    return {
+      error: "No se detectó la lista de participantes. Abrí el panel 'Participantes' en Zoom."
+    };
+  }
 
   return data;
 }
