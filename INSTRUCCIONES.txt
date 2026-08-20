@@ -1,5 +1,5 @@
 ============================================================
-  ZOOM ATTENDANCE TRACKER
+  ZOOM ASSISTANCE TRACKER
   Toma de asistencia automática para Zoom
 ============================================================
 
@@ -65,7 +65,7 @@ No afecta el funcionamiento de la extensión.
 ============================================================
 
 Antes de empezar: necesitás un archivo CSV con la lista de
-tus alumnos. Podés usar el archivo "lista_alumnos.csv"
+tus alumnos.
 de ejemplo y editarlo con Excel o el Bloc de notas.
 
   Formato del CSV:
